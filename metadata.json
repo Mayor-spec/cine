@@ -1,0 +1,6 @@
+{
+  "name": "CineScout",
+  "description": "Professional AI film development intelligence platform providing 8-agent scorecards, evidence-based analysis, Path to 95 optimization, risk matrices, and filmmaker roadmaps.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

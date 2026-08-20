@@ -18,7 +18,7 @@ async function parseBody(req: any): Promise<any> {
       return {};
     }
   }
-  if (typeof req.on === 'function') {
+  if (typeof req.on === 'function' && !req.readableEnded) {
     return new Promise((resolve) => {
       let data = '';
       req.on('data', (chunk: any) => {
@@ -26,7 +26,7 @@ async function parseBody(req: any): Promise<any> {
       });
       req.on('end', () => {
         try {
-          resolve(JSON.parse(data));
+          resolve(data ? JSON.parse(data) : {});
         } catch {
           resolve({});
         }
@@ -39,8 +39,8 @@ async function parseBody(req: any): Promise<any> {
 
 export default async function handler(req: any, res: any) {
   // CORS & Preflight handling
-  res.setHeader('Access-Control-Allow-Credentials', 'true');
-  res.setHeader('Access-Control-Allow-Origin', '*');
+  const origin = req.headers?.origin || '*';
+  res.setHeader('Access-Control-Allow-Origin', origin);
   res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
   res.setHeader(
     'Access-Control-Allow-Headers',
@@ -62,7 +62,14 @@ export default async function handler(req: any, res: any) {
       return res.status(400).json({ error: 'INVALID_REQUEST', message: 'Question is required.' });
     }
 
-    const answer = await askExecutiveRoom(body);
+    // Extract custom key if supplied via headers or body
+    const customApiKey = (req.headers?.['x-gemini-api-key'] as string) || body.apiKey;
+
+    const answer = await askExecutiveRoom({
+      ...body,
+      apiKey: customApiKey,
+    });
+
     return res.status(200).json(answer);
   } catch (err: any) {
     console.error('API /api/ask-room error:', err);

@@ -505,13 +505,11 @@ export async function runScoutInvestigation(projectInput: any) {
   const ai = getGeminiClient();
   const modelName = resolveModelName();
 
-  // If no API key is provided, fail gracefully to the heuristic generator
   if (!ai) {
-    return generateHeuristicFilmReport(projectInput);
+    throw new Error('GEMINI_KEY_MISSING: Google Gemini API Key is not configured. Please add GEMINI_API_KEY to your environment variables or Vercel settings.');
   }
 
-  try {
-    const prompt = `You are CineScout, an elite AI Film Development Intelligence Platform functioning as a virtual film development room with 8 specialized analytical perspectives:
+  const prompt = `You are CineScout, an elite AI Film Development Intelligence Platform functioning as a virtual film development room with 8 specialized analytical perspectives:
 
 1. CONCEPT SCOUT (Premise analysis, originalities, hook strength, core engine)
 2. STORY SCOUT (3-act structure, protagonist arcs, stakes, emotional climax, script doctoring notes)
@@ -556,35 +554,30 @@ CRITICAL SCORING & EVIDENCE-BASED INTELLIGENCE DIRECTIVES:
 
 Return strictly valid JSON adhering to the specified schema.`;
 
-    const response = await generateWithGeminiResiliently(ai, {
-      primaryModel: modelName,
-      contents: prompt,
-      config: {
-        systemInstruction: 'You are the CineScout AI Film Development Intelligence Platform. Act as seasoned executive producers, international sales agents, festival strategists, script doctors, and film market analysts. Deliver sharp, evidence-backed, highly actionable intelligence with rigorous analytical consistency. Strict anti-fabrication standard: always classify claims as SOURCE, INFERENCE, or PROJECTION.',
-        responseMimeType: 'application/json',
-        responseSchema: filmIntelligenceResponseSchema,
-      },
-    });
+  const response = await generateWithGeminiResiliently(ai, {
+    primaryModel: modelName,
+    contents: prompt,
+    config: {
+      systemInstruction: 'You are the CineScout AI Film Development Intelligence Platform. Act as seasoned executive producers, international sales agents, festival strategists, script doctors, and film market analysts. Deliver sharp, evidence-backed, highly actionable intelligence with rigorous analytical consistency. Strict anti-fabrication standard: always classify claims as SOURCE, INFERENCE, or PROJECTION.',
+      responseMimeType: 'application/json',
+      responseSchema: filmIntelligenceResponseSchema,
+    },
+  });
 
-    const textOutput = response.text;
-    if (!textOutput) {
-      throw new Error('Empty response from AI engine.');
-    }
-
-    const parsedData = JSON.parse(textOutput);
-
-    return {
-      ...parsedData,
-      id: `scout-${Date.now()}`,
-      createdAt: new Date().toISOString(),
-      project: projectInput,
-      isDemo: false,
-    };
-  } catch (err: any) {
-    console.error('CineScout Gemini API error:', err?.message || err);
-    // Fallback to high quality heuristic analysis on rate-limits or temporary issues
-    return generateHeuristicFilmReport(projectInput);
+  const textOutput = response.text;
+  if (!textOutput) {
+    throw new Error('Empty response from Gemini AI engine.');
   }
+
+  const parsedData = JSON.parse(textOutput);
+
+  return {
+    ...parsedData,
+    id: `scout-${Date.now()}`,
+    createdAt: new Date().toISOString(),
+    project: projectInput,
+    isDemo: false,
+  };
 }
 
 // Follow-up consultation handler

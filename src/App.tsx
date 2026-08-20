@@ -97,27 +97,18 @@ export default function App() {
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
         
-        if (errorData.error === 'GEMINI_KEY_MISSING') {
+        if (errorData.message?.includes('GEMINI_KEY_MISSING') || errorData.error === 'GEMINI_KEY_MISSING') {
           setInvestigationError({
-            title: 'AI investigation is not configured.',
-            message: 'GEMINI_API_KEY is not configured on the server environment. Please configure your API key in Settings or explore using Demo Mode.',
-          });
-          setIsLoading(false);
-          return;
-        }
-
-        if (errorData.error === 'MALFORMED_RESPONSE') {
-          setInvestigationError({
-            title: 'CineScout received an incomplete analysis. Please try again.',
-            message: 'The AI model generated an incomplete or unparseable intelligence report. Please click Try Again to re-analyze.',
+            title: 'Google Gemini API Key Required',
+            message: 'To synthesize real intelligence with the 8-agent AI studio room, please add your GEMINI_API_KEY to your environment variables or Vercel Settings.',
           });
           setIsLoading(false);
           return;
         }
 
         setInvestigationError({
-          title: 'Investigation interrupted',
-          message: errorData.message || 'CineScout was unable to complete the intelligence synthesis. Please try again.',
+          title: 'Investigation Error',
+          message: errorData.message || 'CineScout was unable to complete the AI investigation. Please verify your GEMINI_API_KEY.',
         });
         setIsLoading(false);
         return;
@@ -131,8 +122,8 @@ export default function App() {
     } catch (err: any) {
       console.error('Investigation error:', err);
       setInvestigationError({
-        title: 'Investigation interrupted',
-        message: err.message || 'Connection error while communicating with CineScout AI room. Please try again.',
+        title: 'Connection Error',
+        message: err.message || 'Unable to connect to CineScout AI backend. Please verify your network and GEMINI_API_KEY.',
       });
     } finally {
       setIsLoading(false);

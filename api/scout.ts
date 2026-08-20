@@ -1,4 +1,6 @@
-import { runScoutInvestigation } from './_lib/filmIntelligence';
+import { runScoutInvestigation, generateHeuristicFilmReport } from './_lib/filmIntelligence';
+
+export const maxDuration = 60; // Extends execution limit on Vercel/Node platforms
 
 async function parseBody(req: any): Promise<any> {
   if (req.body) {
@@ -22,7 +24,7 @@ async function parseBody(req: any): Promise<any> {
   }
 
   // Support Node.js stream body if not pre-parsed
-  if (typeof req.on === 'function') {
+  if (typeof req.on === 'function' && !req.readableEnded) {
     return new Promise((resolve) => {
       let data = '';
       req.on('data', (chunk: any) => {
@@ -30,7 +32,7 @@ async function parseBody(req: any): Promise<any> {
       });
       req.on('end', () => {
         try {
-          resolve(JSON.parse(data));
+          resolve(data ? JSON.parse(data) : {});
         } catch {
           resolve({});
         }
@@ -44,8 +46,8 @@ async function parseBody(req: any): Promise<any> {
 
 export default async function handler(req: any, res: any) {
   // CORS & Preflight handling
-  res.setHeader('Access-Control-Allow-Credentials', 'true');
-  res.setHeader('Access-Control-Allow-Origin', '*');
+  const origin = req.headers?.origin || '*';
+  res.setHeader('Access-Control-Allow-Origin', origin);
   res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
   res.setHeader(
     'Access-Control-Allow-Headers',
@@ -57,11 +59,15 @@ export default async function handler(req: any, res: any) {
   }
 
   if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'METHOD_NOT_ALLOWED', message: 'Method Not Allowed. Use POST.' });
+    return res.status(405).json({
+      error: 'METHOD_NOT_ALLOWED',
+      message: 'Method Not Allowed. Use POST.',
+    });
   }
 
+  let body: any = {};
   try {
-    const body = await parseBody(req);
+    body = await parseBody(req);
 
     if (!body || !body.title || !body.concept) {
       return res.status(400).json({
@@ -70,10 +76,11 @@ export default async function handler(req: any, res: any) {
       });
     }
 
-    // Extract API key from headers if provided
+    // Extract API key from headers or request payload
     const headerKey =
       (req.headers && (req.headers['x-gemini-api-key'] || req.headers['X-Gemini-Api-Key'])) ||
       (req.headers && req.headers['authorization'] ? req.headers['authorization'].replace(/^Bearer\s+/i, '') : '') ||
+      body.apiKey ||
       '';
 
     const report = await runScoutInvestigation(body, headerKey);
@@ -85,14 +92,25 @@ export default async function handler(req: any, res: any) {
     if (errorMsg.includes('GEMINI_KEY_MISSING')) {
       return res.status(422).json({
         error: 'GEMINI_KEY_MISSING',
-        message: 'Google Gemini API Key is not configured. Please add GEMINI_API_KEY to your Vercel Project Settings > Environment Variables, then redeploy.',
+        message: 'Google Gemini API Key is not configured. Please add GEMINI_API_KEY to your environment variables or provide a custom key.',
       });
     }
 
     if (err?.status === 401 || err?.status === 403 || errorMsg.includes('API_KEY_INVALID')) {
       return res.status(401).json({
         error: 'INVALID_API_KEY',
-        message: 'The provided Google Gemini API Key is invalid or expired. Please check your key on Google AI Studio.',
+        message: 'The provided Google Gemini API Key is invalid or expired.',
+      });
+    }
+
+    // Fallback to deterministic heuristic report if AI quotas/rate-limits fail
+    if (body?.title && body?.concept) {
+      console.warn('Falling back to heuristic film report generation.');
+      const fallbackReport = generateHeuristicFilmReport(body);
+      return res.status(200).json({
+        ...fallbackReport,
+        isFallback: true,
+        notice: 'Generated using CineScout heuristic fallback engine due to upstream demand.',
       });
     }
 
@@ -101,4 +119,5 @@ export default async function handler(req: any, res: any) {
       message: errorMsg,
     });
   }
+}
 }

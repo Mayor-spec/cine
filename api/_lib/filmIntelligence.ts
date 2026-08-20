@@ -92,9 +92,8 @@ export async function generateWithGeminiResiliently(
   const candidateModels = [
     params.primaryModel,
     'gemini-2.5-flash',
-    'gemini-2.5-flash-lite',
-    'gemini-3.7-flash',
-    'gemini-3.1-flash-lite',
+    'gemini-2.5-pro',
+    'gemini-2.0-flash',
   ];
 
   const uniqueModels = Array.from(new Set(candidateModels.filter(Boolean)));
@@ -126,7 +125,7 @@ export async function generateWithGeminiResiliently(
 
         if (status === 503 || status === 429 || msg.includes('high demand') || msg.includes('RESOURCE_EXHAUSTED')) {
           if (attempt === 0) {
-            await new Promise((resolve) => setTimeout(resolve, 300));
+            await new Promise((resolve) => setTimeout(resolve, 500));
             continue;
           }
         }
@@ -521,7 +520,7 @@ export async function runScoutInvestigation(projectInput: any, customKey?: strin
   const modelName = resolveModelName();
 
   if (!ai) {
-    throw new Error('GEMINI_KEY_MISSING: Google Gemini API Key is not configured. Please add GEMINI_API_KEY to your environment variables or Vercel settings.');
+    throw new Error('GEMINI_KEY_MISSING: Google Gemini API Key is not configured. Please add GEMINI_API_KEY to your environment variables.');
   }
 
   const prompt = `You are CineScout, an elite AI Film Development Intelligence Platform functioning as a virtual film development room with 8 specialized analytical perspectives:
@@ -576,6 +575,8 @@ Return strictly valid JSON adhering to the specified schema.`;
       systemInstruction: 'You are the CineScout AI Film Development Intelligence Platform. Act as seasoned executive producers, international sales agents, festival strategists, script doctors, and film market analysts. Deliver sharp, evidence-backed, highly actionable intelligence with rigorous analytical consistency. Strict anti-fabrication standard: always classify claims as SOURCE, INFERENCE, or PROJECTION.',
       responseMimeType: 'application/json',
       responseSchema: filmIntelligenceResponseSchema,
+      maxOutputTokens: 8192,
+      temperature: 0.7,
     },
   });
 
@@ -584,7 +585,13 @@ Return strictly valid JSON adhering to the specified schema.`;
     throw new Error('Empty response from Gemini AI engine.');
   }
 
-  const parsedData = JSON.parse(textOutput);
+  let parsedData: any;
+  try {
+    parsedData = JSON.parse(textOutput);
+  } catch (err: any) {
+    console.error('Failed to parse Gemini JSON output:', textOutput);
+    throw new Error(`Invalid JSON returned from model: ${err.message}`);
+  }
 
   return {
     ...parsedData,
@@ -626,11 +633,13 @@ Provide a concise, direct, highly professional response from the relevant Scout 
       contents: prompt,
       config: {
         systemInstruction: 'You are the CineScout Film Advisory Council. Provide sharp, realistic, high-value production/writing/financing guidance.',
+        maxOutputTokens: 1024,
       },
     });
 
     return { answer: response.text };
   } catch (err) {
+    console.error('askExecutiveRoom execution failed:', err);
     return {
       answer: `From the CineScout Executive Room on "${projectTitle || 'Your Project'}":\n\n- **Production Strategy**: Focus on core narrative friction and contained high-value locations to preserve budget.\n- **Market Alignment**: Clarify the primary distribution vehicle (regional theatrical vs SVOD premiere) to direct investor pitch positioning.\n- **Script Polish**: Ensure the central moral dilemma escalates with each major scene transition before entering pre-production.`,
     };
@@ -1109,3 +1118,4 @@ export function generateHeuristicFilmReport(input: any) {
     },
   };
 }
+

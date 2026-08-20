@@ -28,14 +28,16 @@ export function resolveModelName(): string {
   return raw;
 }
 
-// Lazy initialize Gemini client supporting all common Vercel / environment variable names
-export function getGeminiClient(): GoogleGenAI | null {
+// Lazy initialize Gemini client supporting all common Vercel / environment variable names and passed keys
+export function getGeminiClient(customKey?: string): GoogleGenAI | null {
   let apiKey =
+    customKey ||
     process.env.GEMINI_API_KEY ||
     process.env.GOOGLE_API_KEY ||
     process.env.VITE_GEMINI_API_KEY ||
     process.env.API_KEY ||
-    process.env.GOOGLE_GENAI_API_KEY;
+    process.env.GOOGLE_GENAI_API_KEY ||
+    process.env.GEMINI_KEY;
 
   if (!apiKey) {
     return null;
@@ -55,12 +57,25 @@ export function getGeminiClient(): GoogleGenAI | null {
   });
 }
 
-export function getGeminiStatus() {
-  const ai = getGeminiClient();
+export function getGeminiStatus(customKey?: string) {
+  const ai = getGeminiClient(customKey);
+  const rawKey =
+    customKey ||
+    process.env.GEMINI_API_KEY ||
+    process.env.GOOGLE_API_KEY ||
+    process.env.VITE_GEMINI_API_KEY ||
+    process.env.API_KEY ||
+    process.env.GOOGLE_GENAI_API_KEY ||
+    '';
+  const cleanKey = rawKey.trim().replace(/^["']+|["']+$/g, '');
+
   return {
     status: 'ok',
-    aiConfigured: Boolean(ai),
+    aiConfigured: Boolean(ai && cleanKey.length > 10),
+    keyDetected: Boolean(cleanKey.length > 10),
+    keyPrefix: cleanKey ? `${cleanKey.slice(0, 4)}...${cleanKey.slice(-3)}` : null,
     model: resolveModelName(),
+    environment: process.env.NODE_ENV || 'production',
     timestamp: new Date().toISOString(),
   };
 }
@@ -497,12 +512,12 @@ const filmIntelligenceResponseSchema = {
 };
 
 // Primary runner for Film Intelligence
-export async function runScoutInvestigation(projectInput: any) {
+export async function runScoutInvestigation(projectInput: any, customKey?: string) {
   if (!projectInput || !projectInput.title || !projectInput.concept) {
     throw new Error('Project title and concept are required.');
   }
 
-  const ai = getGeminiClient();
+  const ai = getGeminiClient(customKey || projectInput.apiKey);
   const modelName = resolveModelName();
 
   if (!ai) {

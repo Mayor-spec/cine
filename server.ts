@@ -11,13 +11,29 @@ import {
 dotenv.config();
 
 const app = express();
-const PORT = 3000;
+const PORT = Number(process.env.PORT) || 3000;
 
-app.use(express.json({ limit: '10mb' }));
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+
+// Helper to extract custom API key from headers or request payload
+const extractCustomKey = (req: Request): string | undefined => {
+  const headerKey =
+    (req.headers['x-gemini-api-key'] as string) ||
+    (req.headers['X-Gemini-Api-Key'] as string) ||
+    (req.headers['authorization']
+      ? (req.headers['authorization'] as string).replace(/^Bearer\s+/i, '')
+      : '') ||
+    (req.query.apiKey as string) ||
+    (req.body && req.body.apiKey) ||
+    '';
+  return headerKey.trim() || undefined;
+};
 
 // Health check endpoint
 const handleHealth = (req: Request, res: Response) => {
-  res.json(getGeminiStatus());
+  const customKey = extractCustomKey(req);
+  res.json(getGeminiStatus(customKey));
 };
 app.get('/api/health', handleHealth);
 app.get('/health', handleHealth);
@@ -25,7 +41,8 @@ app.get('/health', handleHealth);
 // Film intelligence investigation endpoint
 const handleScout = async (req: Request, res: Response) => {
   try {
-    const report = await runScoutInvestigation(req.body);
+    const customKey = extractCustomKey(req);
+    const report = await runScoutInvestigation(req.body, customKey);
     res.json(report);
   } catch (err: any) {
     console.error('Server /api/scout error:', err);
@@ -65,7 +82,12 @@ async function startServer() {
   } else {
     const distPath = path.join(process.cwd(), 'dist');
     app.use(express.static(distPath));
+
+    // Fallback for client SPA routing (ignoring unmatched /api routes)
     app.get('*', (req: Request, res: Response) => {
+      if (req.path.startsWith('/api/')) {
+        return res.status(404).json({ error: 'NOT_FOUND', message: 'API route not found.' });
+      }
       res.sendFile(path.join(distPath, 'index.html'));
     });
   }
